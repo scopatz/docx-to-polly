@@ -23,11 +23,10 @@ def docx_to_md(ns):
     subprocess.check_call(cmd)
 
 
-def md_to_ssml(ns):
+def md_to_ssmls(ns):
     with open(ns.md) as f:
         s = f.read()
-    s = s.replace('\n\n', '\n<break time="0.3s" />\n\n')
-    s = s.replace('WAIT', '<break time="1.3s">')
+    s = s.replace('WAIT', '<break time="1.3s" />')
     s = RE_UNDERLINE.sub(
             lambda m: '<emphasis level="strong">' + m.group(1) + '</emphasis>', s)
     lines = []
@@ -38,8 +37,11 @@ def md_to_ssml(ns):
         else:
             lines.append(line)
     s = '\n'.join(lines)
-    s = '<speak>' + s[:100] + '</speak>'
-    ns.ssml = s
+    # brak up by paragraph
+    blocks = s.split('\n\n')
+    for i in range(len(blocks)):
+        blocks[i] = '<speak>' + blocks[i] + '<break time="0.3s" /></speak>'
+    ns.ssmls = blocks
 
 
 def session(ns):
@@ -48,15 +50,21 @@ def session(ns):
 
 
 def tts(ns):
-    response = ns.polly.synthesize_speech(Text=ns.ssml,
-                                          TextType='ssml',
-                                          VoiceId='Matthew',
-                                          OutputFormat='mp3')
-    aud = response["AudioStream"].read()
+    nblocks = len(ns.ssmls)
+    aud = b''
+    for i, ssml in enumerate(ns.ssmls):
+        print('{0}/{1}\r'.format(i, nblocks), end='')
+        sys.stdout.flush()
+        response = ns.polly.synthesize_speech(Text=ssml,
+                                              TextType='ssml',
+                                              VoiceId='Matthew',
+                                              OutputFormat='mp3')
+        aud += response["AudioStream"].read()
     base, ext = os.path.splitext(ns.file)
     ns.out = base + '.mp3'
     with open(ns.out, 'bw') as f:
         f.write(aud)
+    print('Done... ' + ns.out)
 
 
 def make_parser():
@@ -70,7 +78,7 @@ def main(args=None):
     p = make_parser()
     ns = p.parse_args(args=args)
     docx_to_md(ns)
-    md_to_ssml(ns)
+    md_to_ssmls(ns)
     session(ns)
     tts(ns)
 
