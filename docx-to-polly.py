@@ -9,6 +9,10 @@ from collections import namedtuple
 from contextlib import closing
 from io import BytesIO
 
+from boto3 import Session
+from botocore.exceptions import BotoCoreError, ClientError
+
+
 RE_UNDERLINE = re.compile('\[(.*?)\]\{\.underline\}')
 
 
@@ -34,8 +38,25 @@ def md_to_ssml(ns):
         else:
             lines.append(line)
     s = '\n'.join(lines)
-    s = '<speak>' + s + '</speak>'
+    s = '<speak>' + s[:100] + '</speak>'
     ns.ssml = s
+
+
+def session(ns):
+    ns.session = Session(profile_name=ns.user)
+    ns.polly = ns.session.client("polly")
+
+
+def tts(ns):
+    response = ns.polly.synthesize_speech(Text=ns.ssml,
+                                          TextType='ssml',
+                                          VoiceId='Matthew',
+                                          OutputFormat='mp3')
+    aud = response["AudioStream"].read()
+    base, ext = os.path.splitext(ns.file)
+    ns.out = base + '.mp3'
+    with open(ns.out, 'bw') as f:
+        f.write(aud)
 
 
 def make_parser():
@@ -50,8 +71,8 @@ def main(args=None):
     ns = p.parse_args(args=args)
     docx_to_md(ns)
     md_to_ssml(ns)
-    print(ns.ssml)
-
+    session(ns)
+    tts(ns)
 
 if __name__ == '__main__':
     main()
