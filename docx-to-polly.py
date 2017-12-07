@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import os
 import sys
+import re
 import getpass
 import subprocess
 from argparse import ArgumentParser
@@ -8,6 +9,7 @@ from collections import namedtuple
 from contextlib import closing
 from io import BytesIO
 
+RE_UNDERLINE = re.compile('\[(.*?)\]\{\.underline\}')
 
 
 def docx_to_md(ns):
@@ -20,9 +22,19 @@ def docx_to_md(ns):
 def md_to_ssml(ns):
     with open(ns.md) as f:
         s = f.read()
+    s = s.replace('\n\n', '\n<break time="0.3s" />\n\n')
+    s = s.replace('WAIT', '<break time="1.3s">')
+    s = RE_UNDERLINE.sub(
+            lambda m: '<emphasis level="strong">' + m.group(1) + '</emphasis>', s)
+    lines = []
+    for line in s.splitlines():
+        if line.startswith('=') and len(set(line)) == 1:
+            if len(lines) > 1:
+                lines.insert(-2, '<break time="0.3s"/>')
+        else:
+            lines.append(line)
+    s = '\n'.join(lines)
     s = '<speak>' + s + '</speak>'
-    s.replace('\n\n', '\n<break time="0.3s" />\n')
-    s.replace('WAIT', '<break time="1.3s">')
     ns.ssml = s
 
 
@@ -35,7 +47,7 @@ def make_parser():
 
 def main(args=None):
     p = make_parser()
-    ns = p.parse_args(arge=args)
+    ns = p.parse_args(args=args)
     docx_to_md(ns)
     md_to_ssml(ns)
     print(ns.ssml)
